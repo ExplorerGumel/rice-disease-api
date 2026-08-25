@@ -50,12 +50,12 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          mkdir -p space_deploy
+          cp app.py model.py requirements.txt README.md efficientnet_b0_best.pth space_deploy/
+
           hf upload Munzali/RICE_DISEASES_CLASSIFICATION \
-            app.py \
-            model.py \
-            requirements.txt \
-            README.md \
-            efficientnet_b0_best.pth \
+            space_deploy \
+            . \
             --repo-type=space \
             --token=$HF_TOKEN \
             --commit-message="Deploy from GitHub Actions"
