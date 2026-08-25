@@ -1,3 +1,15 @@
+---
+title: Rice Diseases Classification
+emoji: 🌾
+colorFrom: green
+colorTo: blue
+sdk: gradio
+sdk_version: 4.44.0
+python_version: "3.10"
+app_file: app.py
+pinned: false
+---
+
 # Rice Leaf Disease Detector
 
 A production-ready computer vision system that detects rice leaf diseases from images using transfer learning. Built end-to-end — from model training and experiment tracking to a live, publicly deployed inference API.
