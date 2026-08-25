@@ -43,19 +43,19 @@ jobs:
         with:
           lfs: true
 
-      - name: Install Hugging Face CLI
+      - name: Install Hugging Face Hub
         run: pip install -U "huggingface_hub[cli]"
 
       - name: Upload only required files to Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          huggingface-cli upload Munzali/RICE_DISEASES_CLASSIFICATION \
+          hf upload Munzali/RICE_DISEASES_CLASSIFICATION \
             app.py \
             model.py \
             requirements.txt \
             README.md \
             efficientnet_b0_best.pth \
-            --repo-type space \
-            --token $HF_TOKEN \
-            --commit-message "Deploy from GitHub Actions"
+            --repo-type=space \
+            --token=$HF_TOKEN \
+            --commit-message="Deploy from GitHub Actions"
