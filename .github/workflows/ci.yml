@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch:          # allows manual trigger
+  workflow_dispatch:
 
 jobs:
   test:
@@ -28,10 +28,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
-          pip install pytest httpx
+          pip install pytest
 
       - name: Run tests
-        run: pytest tests/ -v || echo "No tests found or tests failed"
+        run: pytest tests/ -v || echo "No tests found"
 
   deploy-to-space:
     needs: test
@@ -41,13 +41,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          lfs: true                # required for the .pth model file
+          lfs: true
 
-      - name: Sync to Hugging Face Space
-        uses: huggingface/hub-sync@v0.1.0
-        with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: Munzali/RICE_DISEASES_CLASSIFICATION
-          hf_token: ${{ secrets.HF_TOKEN }}
-          repo_type: space
-          space_sdk: gradio        # important: this is a Gradio Space, not Docker
+      - name: Install Hugging Face CLI
+        run: pip install -U "huggingface_hub[cli]"
+
+      - name: Upload only required files to Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          huggingface-cli upload Munzali/RICE_DISEASES_CLASSIFICATION \
+            app.py \
+            model.py \
+            requirements.txt \
+            README.md \
+            efficientnet_b0_best.pth \
+            --repo-type space \
+            --token $HF_TOKEN \
+            --commit-message "Deploy from GitHub Actions"
