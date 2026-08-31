@@ -12,7 +12,7 @@ on:
 env:
   REGISTRY: registry.hf.space
   HF_NAMESPACE: Munzali
-  HF_SPACE_NAME: RICE_DISEASES_CLASSIFICATION
+  HF_SPACE_NAME: rice_diseases_classification
   IMAGE_NAME: registry.hf.space/Munzali/rice_diseases_classification
   
 jobs:
