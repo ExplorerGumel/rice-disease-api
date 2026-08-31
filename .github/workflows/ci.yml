@@ -8,14 +8,13 @@ on:
     branches:
       - main
   workflow_dispatch:
-
+  
 env:
   REGISTRY: registry.hf.space
   HF_NAMESPACE: Munzali
   HF_SPACE_NAME: RICE_DISEASES_CLASSIFICATION
-  # Full image name for HF registry
-  IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}
-
+  IMAGE_NAME: registry.hf.space/Munzali/RICE_DISEASES_CLASSIFICATION
+  
 jobs:
   test:
     runs-on: ubuntu-latest
