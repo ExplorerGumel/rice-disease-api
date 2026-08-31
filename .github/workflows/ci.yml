@@ -1,4 +1,4 @@
-name: Rice Disease Classification CI/CD
+name: Build and Deploy Docker Image to HF Space
 
 on:
   push:
@@ -9,33 +9,38 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  # Change these to match your project
+  REGISTRY: registry.hf.space
+  HF_NAMESPACE: Munzali
+  HF_SPACE_NAME: RICE_DISEASES_CLASSIFICATION
+  IMAGE_NAME: ${{ secrets.HF_USERNAME }}/${{ env.HF_SPACE_NAME }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           lfs: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
+      
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install pytest
-
+      
       - name: Run tests
         run: pytest tests/ -v || echo "No tests found"
 
-  deploy-to-space:
+  build-and-push:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     
     steps:
@@ -44,32 +49,77 @@ jobs:
         with:
           lfs: true
 
-      - name: Install Hugging Face Hub
-        run: pip install -U "huggingface_hub[cli]"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Prepare deployment files
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - name: Log in to Hugging Face Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HF_USERNAME }}
+          password: ${{ secrets.HF_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=ref,event=branch
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Option A: Restart HF Space via API
+  restart-space:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Restart Hugging Face Space
         run: |
-          # Create deployment directory
-          mkdir -p space_deploy
+          curl -X POST "https://huggingface.co/api/spaces/${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}/restart" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}"
+      
+      - name: Wait for Space to be ready
+        run: |
+          echo "⏳ Waiting for Space to restart..."
+          sleep 60
           
-          # Copy ALL required files
-          cp app.py space_deploy/
-          cp inference.py space_deploy/      # ← ADD THIS!
-          cp requirements.txt space_deploy/
-          cp Dockerfile space_deploy/
-          cp efficientnet_b0_best.pth space_deploy/
-          cp README.md space_deploy/  # Optional
+          # Check if Space is running
+          STATUS=$(curl -s "https://huggingface.co/api/spaces/${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" | jq -r '.runtime.stage')
           
-          # List files being deployed (for verification)
-          echo "📦 Files being deployed to Hugging Face Space:"
-          ls -lh space_deploy/
+          echo "📊 Space status: $STATUS"
           
-          # Upload to Hugging Face Space
-          hf upload Munzali/RICE_DISEASES_CLASSIFICATION \
-            space_deploy \
-            . \
-            --repo-type=space \
-            --token=$HF_TOKEN \
-            --commit-message="Deploy from GitHub Actions - $(date +'%Y-%m-%d %H:%M:%S')"
+          if [ "$STATUS" == "RUNNING" ]; then
+            echo "✅ Space is running!"
+          else
+            echo "⚠️ Space status: $STATUS - Check logs at: https://huggingface.co/spaces/${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}/logs"
+          fi
+
+  # Option B: Deploy using HF Spaces Deploy Action (Alternative)
+  deploy-with-action:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to Hugging Face Space
+        uses: huggingface/hf-spaces-deploy@v1
+        with:
+          hf_token: ${{ secrets.HF_TOKEN }}
+          space_name: ${{ env.HF_NAMESPACE }}/${{ env.HF_SPACE_NAME }}
+          repo_url: ${{ github.event.repository.git_url }}
+          repo_ref: main
