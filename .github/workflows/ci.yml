@@ -47,15 +47,16 @@ jobs:
       - name: Install Hugging Face Hub
         run: pip install -U "huggingface_hub[cli]"
 
-      - name: Prepare minimal deployment files
+      - name: Prepare deployment files
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           # Create deployment directory
           mkdir -p space_deploy
           
-          # Copy ONLY required files
+          # Copy ALL required files
           cp app.py space_deploy/
+          cp inference.py space_deploy/      # ← ADD THIS!
           cp requirements.txt space_deploy/
           cp Dockerfile space_deploy/
           cp efficientnet_b0_best.pth space_deploy/
