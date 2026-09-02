@@ -54,15 +54,15 @@ jobs:
           context: .
           push: true
           tags: |
-            registry.hf.space/munzali/rice-diseases-classification:latest
-            registry.hf.space/munzali/rice-diseases-classification:${{ github.sha }}
+            registry.hf.space/munzali/rice_diseases_classification:latest
+            registry.hf.space/munzali/rice_diseases_classification:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Verify image was pushed
         run: |
           echo "✅ Docker image pushed successfully!"
-          echo "📦 Image: registry.hf.space/munzali/rice-diseases-classification:latest"
+          echo "📦 Image: registry.hf.space/munzali/rice_diseases_classification:latest"
 
   restart-space:
     needs: build-and-push
