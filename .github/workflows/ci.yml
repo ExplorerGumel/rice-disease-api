@@ -5,6 +5,10 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  IMAGE_NAME: registry.hf.space/munzali/rice_diseases_classification:latest
+  SPACE_NAME: Munzali/RICE_DISEASES_CLASSIFICATION
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -72,6 +76,16 @@ jobs:
     steps:
       - name: Restart Hugging Face Space
         run: |
-          # API uses original name (with uppercase)
-          curl -X POST "https://huggingface.co/api/spaces/Munzali/RICE_DISEASES_CLASSIFICATION/restart" \
+          curl -X POST "https://huggingface.co/api/spaces/${{ env.SPACE_NAME }}/restart" \
             -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}"
+          
+          echo "✅ Space restart triggered!"
+          
+          # Wait and check status
+          sleep 30
+          
+          STATUS=$(curl -s "https://huggingface.co/api/spaces/${{ env.SPACE_NAME }}" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" | jq -r '.runtime.stage' 2>/dev/null || echo "unknown")
+          
+          echo "📊 Space status: $STATUS"
+          echo "🔗 https://huggingface.co/spaces/${{ env.SPACE_NAME }}"
