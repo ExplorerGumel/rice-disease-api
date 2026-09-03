@@ -1,43 +1,74 @@
-name: Build and Deploy to HF Space
+name: Test and Deploy Rice Disease API
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
-  IMAGE_NAME: registry.hf.space/munzali/rice_diseases_classification:latest
-  SPACE_NAME: Munzali/RICE_DISEASES_CLASSIFICATION
+  HF_SPACE: Munzali/RICE_DISEASES_CLASSIFICATION
 
 jobs:
+
+  # ============================================================
+  # 1. TEST
+  # ============================================================
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           lfs: true
-      
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      
+
+      - name: Install PyTorch CPU
+        run: |
+          python -m pip install --upgrade pip
+
+          pip install \
+            torch==2.0.1 \
+            torchvision==0.15.2 \
+            --index-url https://download.pytorch.org/whl/cpu
+
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
           pip install pytest
-      
-      - name: Run tests
-        run: pytest tests/ -v || echo "No tests found"
 
-  build-and-push:
+      - name: Verify model
+        run: |
+          test -f models/efficientnet_b0_best.pth
+          echo "✅ Model found"
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v
+
+
+  # ============================================================
+  # 2. BUILD DOCKER IMAGE
+  # ============================================================
+  build:
+    name: Build Docker Image
     needs: test
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout code
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
@@ -45,47 +76,57 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Hugging Face Registry
-        uses: docker/login-action@v3
-        with:
-          registry: registry.hf.space
-          username: munzali
-          password: ${{ secrets.HF_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          tags: |
-            registry.hf.space/munzali/rice_diseases_classification:latest
-            registry.hf.space/munzali/rice_diseases_classification:${{ github.sha }}
+          push: false
+          tags: rice-disease-api:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify image was pushed
+      - name: Build successful
         run: |
-          echo "✅ Docker image pushed successfully!"
-          echo "📦 Image: registry.hf.space/munzali/rice_diseases_classification:latest"
+          echo "✅ Docker image built successfully"
 
-  restart-space:
-    needs: build-and-push
-    if: github.ref == 'refs/heads/main'
+
+  # ============================================================
+  # 3. DEPLOY TO HUGGING FACE
+  # ============================================================
+  deploy:
+    name: Deploy to Hugging Face
+    needs: build
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Restart Hugging Face Space
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install Hugging Face CLI
         run: |
-          curl -X POST "https://huggingface.co/api/spaces/${{ env.SPACE_NAME }}/restart" \
-            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}"
-          
-          echo "✅ Space restart triggered!"
-          
-          # Wait and check status
-          sleep 30
-          
-          STATUS=$(curl -s "https://huggingface.co/api/spaces/${{ env.SPACE_NAME }}" \
-            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" | jq -r '.runtime.stage' 2>/dev/null || echo "unknown")
-          
-          echo "📊 Space status: $STATUS"
-          echo "🔗 https://huggingface.co/spaces/${{ env.SPACE_NAME }}"
+          python -m pip install --upgrade pip
+          pip install -U huggingface_hub
+
+      - name: Deploy production files
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          hf upload "$HF_SPACE" . . \
+            --repo-type space \
+            --token "$HF_TOKEN" \
+            --include "Dockerfile" \
+            --include "README.md" \
+            --include "app.py" \
+            --include "inference.py" \
+            --include "requirements.txt" \
+            --include "models/efficientnet_b0_best.pth" \
+            --delete="*" \
+            --commit-message="Deploy production API - $GITHUB_SHA"
+
+      - name: Deployment complete
+        run: |
+          echo "🚀 Deployment completed successfully"
+          echo "Space: https://huggingface.co/spaces/$HF_SPACE"
