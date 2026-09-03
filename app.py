@@ -3,56 +3,76 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import uvicorn
 import os
+
 from inference import load_model, predict
 
-MODEL_PATH = os.getenv("MODEL_PATH", "models/efficientnet_b0_best.pth")
+
+MODEL_PATH = os.getenv(
+    "MODEL_PATH",
+    "models/efficientnet_b0_best.pth"
+)
+
 model = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global model
+
     print(f"Loading model from {MODEL_PATH}...")
+
     model = load_model(MODEL_PATH)
+
     print("✅ Model loaded successfully")
+
     yield
+
     print("Shutting down...")
+
 
 app = FastAPI(
     title="Rice Leaf Disease Detection API",
-    description="Detects rice leaf diseases from images using EfficientNet-B0",
+    description="AI-powered rice leaf disease classification using EfficientNet-B0",
     version="1.0.0",
-    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
+
 
 @app.get("/")
 def home():
     return {
         "message": "Rice Leaf Disease Detection API",
         "version": "1.0.0",
-        "docs":    "/docs",
+        "docs": "/docs"
     }
+
 
 @app.get("/health")
 def health():
     return {
         "status": "healthy",
-        "model":  "EfficientNet-B0",
-        "classes": ["bacterial", "blast", "brownspot", "healthy", "tungro"],
+        "model_loaded": model is not None
     }
+
 
 @app.post("/predict")
 async def predict_disease(file: UploadFile = File(...)):
-    if not file.content_type.startswith("image/"):
+
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(
             status_code=400,
-            detail="File must be an image (jpg, png, etc.)"
+            detail="File must be an image"
         )
-    try:
-        image_bytes = await file.read()
-        result      = predict(model, image_bytes)
-        return JSONResponse(content=result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    image_bytes = await file.read()
+
+    result = predict(model, image_bytes)
+
+    return JSONResponse(content=result)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 7860))
